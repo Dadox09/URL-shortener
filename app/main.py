@@ -5,9 +5,11 @@ import psycopg
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, HttpUrl
+from dotenv import load_dotenv
 
 app = FastAPI()
 
+load_dotenv()
 conn = psycopg.connect(
     host=os.environ.get("DB_HOST", "localhost"),
     dbname=os.environ["POSTGRES_DB"],

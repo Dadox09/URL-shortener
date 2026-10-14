@@ -19,3 +19,5 @@ Dockerfile
 # Tests and docs are not part of the runtime image
 test_*.py
 README.md
+
+.env
