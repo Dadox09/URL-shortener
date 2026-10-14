@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "8000:80"
+    environment:
+      DB_HOST: db
 
   db:
     image: postgres:15

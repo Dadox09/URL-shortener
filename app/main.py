@@ -1,20 +1,30 @@
 # main.py
 import hashlib
-import sqlite3
+import os
+import psycopg
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, HttpUrl
 
 app = FastAPI()
 
-conn = sqlite3.connect("database.sql", check_same_thread=False)
+
+conn = psycopg.connect(
+    host=os.environ.get("DB_HOST", "localhost"),
+    dbname="url_shortener_db",
+    user="postgres",
+    password="password",
+)
+
 conn.execute("""
     CREATE TABLE IF NOT EXISTS urls (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         original_url TEXT NOT NULL,
         digest TEXT NOT NULL UNIQUE
     )
     """)
+
+conn.commit()
 
 
 class UrlRequest(BaseModel):
@@ -50,15 +60,15 @@ def shorten_url(url_request: UrlRequest):
     # Save the original and shortened URL in the database
     try:
         conn.execute(
-            "INSERT INTO urls (original_url, digest) VALUES (?, ?)",
+            "INSERT INTO urls (original_url, digest) VALUES (%s, %s)",
             (url, digest),
         )
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         # shortened_url already exists: same URL shortened again, or a hash collision
         conn.rollback()
         cursor = conn.execute(
-            "SELECT original_url FROM urls WHERE digest = ?", (digest,)
+            "SELECT original_url FROM urls WHERE digest = %s", (digest,)
         )
         if cursor.fetchone()[0] != url:
             raise HTTPException(
@@ -76,7 +86,7 @@ def redirect_to_original(code: str):
     digest = code
     try:
         cursor = conn.execute(
-            "SELECT original_url FROM urls WHERE digest = ?", (digest,)
+            "SELECT original_url FROM urls WHERE digest = %s", (digest,)
         )
         original_url = cursor.fetchone()[0]
     except TypeError:
