@@ -2,6 +2,8 @@
 import hashlib
 import sqlite3
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, HttpUrl
 
 app = FastAPI()
 
@@ -13,6 +15,10 @@ conn.execute("""
         digest TEXT NOT NULL UNIQUE
     )
     """)
+
+
+class UrlRequest(BaseModel):
+    url: HttpUrl
 
 
 @app.get("/")  # endpoint
@@ -33,10 +39,11 @@ async def get_status():
 
 
 @app.post("/shorten")  # endpoint to shorten a URL
-async def shorten_url(url: str):
+def shorten_url(url_request: UrlRequest):
     """
     This endpoint takes a URL as input and returns a shortened version of it.
     """
+    url = str(url_request.url)
     digest = hashlib.md5(url.encode()).hexdigest()[:6]
     shortened_url = f"https://short.url/{digest}"
 
@@ -62,7 +69,7 @@ async def shorten_url(url: str):
 
 
 @app.get("/{code}", responses={404: {"description": "Shortened URL not found"}})
-async def redirect_to_original(code: str):
+def redirect_to_original(code: str):
     """
     This endpoint takes a shortened URL code and redirects to the original URL.
     """
@@ -77,4 +84,4 @@ async def redirect_to_original(code: str):
             status_code=404, detail="404 - Shortened URL not found."
         ) from None
 
-    return {"original_url": original_url}
+    return RedirectResponse(url=original_url)
