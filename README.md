@@ -28,7 +28,7 @@ curl -i http://127.0.0.1:8000/<code>
 
 ```bash
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 Interactive docs are available at <http://127.0.0.1:8000/docs>.
