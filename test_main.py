@@ -1,10 +1,20 @@
-from app.main import app
+import pytest
 from fastapi.testclient import TestClient
 
-client = TestClient(app)
+from app.main import app
 
 
-def test_read_root():
+@pytest.fixture(scope="module")
+def client():
+    """
+    TestClient used as a context manager runs the app lifespan,
+    so the connection pool is opened before the tests and closed after.
+    """
+    with TestClient(app) as client:
+        yield client
+
+
+def test_read_root(client):
     """
     Test the root endpoint.
     """
@@ -13,7 +23,7 @@ def test_read_root():
     assert response.json() == {"message": "Hello from the FastAPI Service!"}
 
 
-def test_get_status():
+def test_get_status(client):
     """
     Test the status endpoint.
     """
@@ -22,7 +32,7 @@ def test_get_status():
     assert response.json() == {"status": "API is running correctly."}
 
 
-def test_shorten_url():
+def test_shorten_url(client):
     """
     Test the URL shortening endpoint.
     """
@@ -35,7 +45,7 @@ def test_shorten_url():
     assert data["original_url"] == test_url
 
 
-def test_not_valid_url():
+def test_not_valid_url(client):
     """
     Test the URL shortening endpoint with an invalid URL.
     """
@@ -44,7 +54,7 @@ def test_not_valid_url():
     assert response.status_code == 422  # Unprocessable Entity
 
 
-def test_shorten_url_same_digest():
+def test_shorten_url_same_digest(client):
     """
     Test the URL shortening endpoint for a collision scenario.
     """
@@ -59,7 +69,7 @@ def test_shorten_url_same_digest():
     assert response.json()["shortened_url"] == shortened_url
 
 
-def test_redirect_to_original():
+def test_redirect_to_original(client):
     """
     Test the redirection endpoint.
     """
@@ -77,7 +87,7 @@ def test_redirect_to_original():
     assert response.headers["location"] == test_url
 
 
-def test_redirect_to_original_not_found():
+def test_redirect_to_original_not_found(client):
     """
     Test the redirection endpoint for a non-existent digest.
     """

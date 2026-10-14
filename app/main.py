@@ -1,31 +1,62 @@
 # main.py
 import hashlib
 import os
-import psycopg
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, HttpUrl
-from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+from typing import Annotated
 
-app = FastAPI()
+import psycopg
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from psycopg_pool import ConnectionPool
+from pydantic import BaseModel, HttpUrl
 
 load_dotenv()
-conn = psycopg.connect(
-    host=os.environ.get("DB_HOST", "localhost"),
-    dbname=os.environ["POSTGRES_DB"],
-    user=os.environ["POSTGRES_USER"],
-    password=os.environ["POSTGRES_PASSWORD"],
-)
 
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS urls (
-        id SERIAL PRIMARY KEY,
-        original_url TEXT NOT NULL,
-        digest TEXT NOT NULL UNIQUE
-    )
-    """)
 
-conn.commit()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Startup: open the connection pool and create the table.
+    Shutdown: close the pool (when the `with` block exits).
+    """
+    with ConnectionPool(
+        kwargs={
+            "host": os.environ.get("DB_HOST", "localhost"),
+            "dbname": os.environ["POSTGRES_DB"],
+            "user": os.environ["POSTGRES_USER"],
+            "password": os.environ["POSTGRES_PASSWORD"],
+        },
+        # Verify each connection before handing it out, so a DB restart
+        # doesn't leave dead connections in the pool
+        check=ConnectionPool.check_connection,
+    ) as pool:
+        with pool.connection() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS urls (
+                    id SERIAL PRIMARY KEY,
+                    original_url TEXT NOT NULL,
+                    digest TEXT NOT NULL UNIQUE
+                )
+                """)
+
+        app.state.pool = pool
+        yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+def get_conn(request: Request):
+    """
+    Dependency: borrow a connection from the pool for the duration of a request.
+    On exit the pool commits (or rolls back on error) and takes the connection back.
+    """
+    with request.app.state.pool.connection() as conn:
+        yield conn
+
+
+DbConn = Annotated[psycopg.Connection, Depends(get_conn)]
 
 
 class UrlRequest(BaseModel):
@@ -50,7 +81,7 @@ async def get_status():
 
 
 @app.post("/shorten")  # endpoint to shorten a URL
-def shorten_url(url_request: UrlRequest):
+def shorten_url(url_request: UrlRequest, conn: DbConn):
     """
     This endpoint takes a URL as input and returns a shortened version of it.
     """
@@ -80,7 +111,7 @@ def shorten_url(url_request: UrlRequest):
 
 
 @app.get("/{code}", responses={404: {"description": "Shortened URL not found"}})
-def redirect_to_original(code: str):
+def redirect_to_original(code: str, conn: DbConn):
     """
     This endpoint takes a shortened URL code and redirects to the original URL.
     """
