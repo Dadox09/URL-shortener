@@ -8,12 +8,11 @@ from pydantic import BaseModel, HttpUrl
 
 app = FastAPI()
 
-
 conn = psycopg.connect(
     host=os.environ.get("DB_HOST", "localhost"),
-    dbname="url_shortener_db",
-    user="postgres",
-    password="password",
+    dbname=os.environ["POSTGRES_DB"],
+    user=os.environ["POSTGRES_USER"],
+    password=os.environ["POSTGRES_PASSWORD"],
 )
 
 conn.execute("""

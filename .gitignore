@@ -2,3 +2,4 @@
 __pycache__/
 database.sql
 .pytest_cache/
+.env
